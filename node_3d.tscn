@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://b6ps8l1ho1qy3"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4xowi"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_rnfia"]
+material = SubResource("StandardMaterial3D_4xowi")
+radius = 20.0
+height = 40.0
+
+[node name="Node3D" type="Node3D" unique_id=1277520178]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1415235559]
+mesh = SubResource("SphereMesh_rnfia")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1080675403]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 69.05741, 24.266308, 0)
