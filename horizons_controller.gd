@@ -31,8 +31,8 @@ var sel_year: int = 2026
 var sel_month: int = 11
 var sel_day: int = 15
 var sel_step_30m: int = 24
+var sim_seconds_offset: float = 0.0
 var is_playing_time: bool = false
-var play_accum: float = 0.0
 
 # Candidate Grid Points & 3D Visual Nodes
 var candidate_coords: Array[Vector2] = []
@@ -52,6 +52,11 @@ var telemetry_label: RichTextLabel
 var compare_label: Label
 
 func _ready() -> void:
+	if earth_node:
+		earth_node.rotation_order = EULER_ORDER_ZXY
+	if moon_node:
+		moon_node.rotation_order = EULER_ORDER_ZXY
+
 	_generate_lunar_grid_points()
 	_build_mission_gui()
 	_refresh_calendar_grid()
@@ -90,22 +95,12 @@ func _generate_lunar_grid_points() -> void:
 
 func _process(delta: float) -> void:
 	if is_playing_time:
-		play_accum += delta
-		if play_accum >= 0.25:
-			play_accum = 0.0
+		# Advance 2 hours (7200 sec) per real second so Earth spins smoothly
+		sim_seconds_offset += delta * 7200.0
+		while sim_seconds_offset >= 1800.0:
+			sim_seconds_offset -= 1800.0
 			_advance_time_step(1)
-
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		# Ignore 1 & 2 only while actively typing inside Lat/Lon text boxes
-		var focused := get_viewport().gui_get_focus_owner()
-		if focused is LineEdit:
-			return
-
-		if event.keycode == KEY_1 or event.physical_keycode == KEY_1 or event.keycode == KEY_KP_1:
-			focus_camera_on_earth()
-		elif event.keycode == KEY_2 or event.physical_keycode == KEY_2 or event.keycode == KEY_KP_2:
-			focus_camera_on_moon()
+		_update_simulation()
 
 func _apply_earth_coordinates() -> void:
 	if lat_input and lon_input:
@@ -116,38 +111,6 @@ func _apply_earth_coordinates() -> void:
 		lat_input.release_focus()
 		lon_input.release_focus()
 		_update_simulation()
-
-func focus_camera_on_earth() -> void:
-	var cam: Camera3D = camera_node if camera_node else get_viewport().get_camera_3d()
-	if not cam or not earth_node:
-		return
-
-	var earth_center := earth_node.global_position
-	var r := _get_earth_visual_radius()
-	var dir := (earth_marker.global_position - earth_center).normalized() if earth_marker else Vector3(0.0, 0.25, 1.0).normalized()
-	if dir.length_squared() < 0.01:
-		dir = Vector3(0.0, 0.25, 1.0).normalized()
-
-	cam.global_position = earth_center + dir * (r * 3.0)
-	cam.look_at(earth_center, Vector3.UP)
-	_sync_camera_controls(cam, r * 1.5)
-
-func focus_camera_on_moon() -> void:
-	var cam: Camera3D = camera_node if camera_node else get_viewport().get_camera_3d()
-	if not cam or not moon_node:
-		return
-
-	var moon_center := moon_node.global_position
-	cam.global_position = moon_center + Vector3(0.0, -28.0, 58.0)
-	cam.look_at(moon_center, Vector3.UP)
-	_sync_camera_controls(cam, 40.0)
-
-func _sync_camera_controls(cam: Camera3D, speed: float) -> void:
-	if "yaw" in cam and "pitch" in cam:
-		cam.yaw = cam.rotation.y
-		cam.pitch = cam.rotation.x
-	if "fly_speed" in cam:
-		cam.fly_speed = speed
 
 func _get_earth_visual_radius() -> float:
 	if earth_node:
@@ -165,16 +128,22 @@ func _lat_lon_to_vec3(lat_deg: float, lon_deg: float) -> Vector3:
 	).normalized()
 
 @warning_ignore("integer_division")
+@warning_ignore("integer_division")
 func _update_simulation() -> void:
-	var total_mins: int = sel_step_30m * 30
-	var h: int = total_mins / 60
-	var m: int = total_mins % 60
-	time_label.text = "Date: %04d-%02d-%02d  |  Time: %02d:%02d UTC" % [sel_year, sel_month, sel_day, h, m]
-
-	var unix_time := Time.get_unix_time_from_datetime_dict({
-		"year": sel_year, "month": sel_month, "day": sel_day,
-		"hour": h, "minute": m, "second": 0
+	var base_unix := Time.get_unix_time_from_datetime_dict({
+		"year": sel_year,
+		"month": sel_month,
+		"day": sel_day,
+		"hour": (sel_step_30m * 30) / 60,
+		"minute": (sel_step_30m * 30) % 60,
+		"second": 0
 	})
+	var unix_time: float = float(base_unix) + sim_seconds_offset
+	var dt := Time.get_datetime_dict_from_unix_time(int(unix_time))
+
+	time_label.text = "Date: %04d-%02d-%02d  |  Time: %02d:%02d UTC" % [
+		dt["year"], dt["month"], dt["day"], dt["hour"], dt["minute"]
+	]
 
 	# 1. Compute Moon-centered Earth & Sun vectors
 	var positions := _compute_ephemeris_km(unix_time)
@@ -185,10 +154,10 @@ func _update_simulation() -> void:
 	var earth_godot := Vector3(earth_km.x, earth_km.z, -earth_km.y) * km_to_units
 	var sun_dir_godot := Vector3(sun_km.x, sun_km.z, -sun_km.y).normalized()
 
-	# 2. Place Earth & Spin by Greenwich Mean Sidereal Time (GMST)
+	# 2. Place Earth & Spin Smoothly by Greenwich Mean Sidereal Time (GMST)
 	if earth_node:
 		earth_node.global_position = earth_godot
-		var d_j2000: float = (float(unix_time) - 946728000.0) / 86400.0
+		var d_j2000: float = (unix_time - 946728000.0) / 86400.0
 		var gmst_deg: float = fmod(280.46061837 + 360.98564736629 * d_j2000, 360.0)
 		earth_node.rotation.y = deg_to_rad(gmst_deg)
 
@@ -303,7 +272,7 @@ func _evaluate_and_rank_points(
 		site_list_vbox.add_child(btn)
 
 func _update_telemetry_panel(
-	unix_time: int,
+	unix_time: float,
 	moon_site_pos: Vector3,
 	moon_normal: Vector3,
 	earth_base_pos: Vector3,
@@ -351,14 +320,14 @@ func _update_telemetry_panel(
 
 	telemetry_label.text = txt
 
-func _scan_window_hours(start_unix: int, check_solar: bool, current_state: bool) -> float:
+func _scan_window_hours(start_unix: float, check_solar: bool, current_state: bool) -> float:
 	var moon_local := _lat_lon_to_vec3(moon_lat_deg, moon_lon_deg)
 	var earth_local := _lat_lon_to_vec3(earth_lat_deg, earth_lon_deg)
 	var km_to_units: float = moon_radius_godot / REAL_MOON_RADIUS_KM
 	var earth_r_units := _get_earth_visual_radius()
 
 	for step in range(1, 672):
-		var t := start_unix + step * 1800
+		var t: float = start_unix + float(step) * 1800.0
 		var pos := _compute_ephemeris_km(t)
 		var e_km: Vector3 = pos["earth"]
 		var s_km: Vector3 = pos["sun"]
@@ -375,7 +344,7 @@ func _scan_window_hours(start_unix: int, check_solar: bool, current_state: bool)
 			if is_day != current_state:
 				return float(step) * 0.5
 		else:
-			var d_j2000: float = (float(t) - 946728000.0) / 86400.0
+			var d_j2000: float = (t - 946728000.0) / 86400.0
 			var gmst_rad := deg_to_rad(fmod(280.46061837 + 360.98564736629 * d_j2000, 360.0))
 			var e_basis := Basis(Vector3.UP, gmst_rad) * Basis(Vector3.FORWARD, deg_to_rad(23.44))
 			var e_norm := (e_basis * earth_local).normalized()
@@ -397,9 +366,8 @@ func _advance_time_step(delta_steps: int) -> void:
 			sel_day = 1
 			_change_month(1)
 			return
-	time_slider.value = sel_step_30m
+	time_slider.set_value_no_signal(sel_step_30m)
 	_refresh_calendar_grid()
-	_update_simulation()
 
 func _build_mission_gui() -> void:
 	var canvas := CanvasLayer.new()
@@ -480,7 +448,11 @@ func _build_mission_gui() -> void:
 	time_slider.step = 1
 	time_slider.value = sel_step_30m
 	time_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	time_slider.value_changed.connect(func(v): sel_step_30m = int(v); _update_simulation())
+	time_slider.value_changed.connect(func(v):
+		sel_step_30m = int(v)
+		sim_seconds_offset = 0.0
+		_update_simulation()
+	)
 	slider_hbox.add_child(time_slider)
 
 	play_btn = Button.new()
@@ -603,7 +575,12 @@ func _refresh_calendar_grid() -> void:
 			btn.text = str(day_num)
 			btn.disabled = false
 			btn.button_pressed = (day_num == sel_day)
-			btn.pressed.connect(func(): sel_day = day_num; _refresh_calendar_grid(); _update_simulation())
+			btn.pressed.connect(func():
+				sel_day = day_num
+				sim_seconds_offset = 0.0
+				_refresh_calendar_grid()
+				_update_simulation()
+			)
 		else:
 			btn.text = ""
 			btn.disabled = true
@@ -617,8 +594,8 @@ func _days_in_month(y: int, m: int) -> int:
 		return 29 if is_leap else 28
 	return 31
 
-func _compute_ephemeris_km(unix_time: int) -> Dictionary:
-	var d: float = (float(unix_time) - 946728000.0) / 86400.0
+func _compute_ephemeris_km(unix_time: float) -> Dictionary:
+	var d: float = (unix_time - 946728000.0) / 86400.0
 
 	var L_prime := deg_to_rad(fmod(218.3164477 + 13.17639648 * d, 360.0))
 	var D := deg_to_rad(fmod(297.8501921 + 12.19074912 * d, 360.0))
