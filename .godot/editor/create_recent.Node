@@ -1,7 +1,9 @@
+CSGSphere3D
+MeshInstance3D
+HTTPRequest
+Node
 CollisionShape3D
 StaticBody3D
-CSGSphere3D
 Camera3D
 WorldEnvironment
 DirectionalLight3D
-MeshInstance3D

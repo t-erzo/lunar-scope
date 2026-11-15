@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbpvebpx2gj0h"
-path="res://.godot/imported/hopefullystars.jpg-bc68a718abeecaeb9c5c7718d69b8204.ctex"
+uid="uid://n4omavf872ub"
+path="res://.godot/imported/earthHeightMap8kres.jpg-e5e07b6e598b5e3ed197321fb7211cac.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://hopefullystars.jpg"
-dest_files=["res://.godot/imported/hopefullystars.jpg-bc68a718abeecaeb9c5c7718d69b8204.ctex"]
+source_file="res://earthHeightMap8kres.jpg"
+dest_files=["res://.godot/imported/earthHeightMap8kres.jpg-e5e07b6e598b5e3ed197321fb7211cac.ctex"]
 
 [params]
 

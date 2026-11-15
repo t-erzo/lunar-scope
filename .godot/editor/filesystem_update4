@@ -1,3 +1,4 @@
 res://node_3d.tscn
 res://camera_3d.gd
-res://csg_sphere_3d.gd
+res://moonTerrain.gd
+res://horizons_controller.gd
