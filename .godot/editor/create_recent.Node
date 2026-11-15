@@ -1,5 +1,5 @@
-CSGSphere3D
 MeshInstance3D
+CSGSphere3D
 HTTPRequest
 Node
 CollisionShape3D

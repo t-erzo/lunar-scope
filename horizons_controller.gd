@@ -8,6 +8,7 @@ extends Node
 @export var earth_marker: Node3D
 @export var best_pole_marker: Node3D
 @export var moon_radius_godot: float = 20.0
+@export var sun_node: Node3D
 
 const REAL_MOON_RADIUS_KM = 1737.4
 const REAL_EARTH_RADIUS_KM = 6371.0
@@ -170,6 +171,11 @@ func _update_simulation() -> void:
 	# 4. Aim Sunlight
 	if sun_light and sun_dir_godot != Vector3.ZERO:
 		sun_light.look_at_from_position(sun_dir_godot * 500.0, Vector3.ZERO, Vector3.UP)
+
+	if sun_node and sun_dir_godot != Vector3.ZERO:
+		# Place Sun at 10,000 units with radius 46.55 -> exact 0.53° true angular size from the Moon
+		var moon_center := moon_node.global_position if moon_node else Vector3.ZERO
+		sun_node.global_position = moon_center + sun_dir_godot * 10000.0
 
 	# 5. Snap Pink EarthMarker Directly onto Earth's Surface at (earth_lat_deg, earth_lon_deg)
 	var earth_visual_r := _get_earth_visual_radius()
